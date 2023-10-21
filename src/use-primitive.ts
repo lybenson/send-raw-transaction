@@ -3,43 +3,37 @@ import { account, rpc_url } from './constant'
 import { hexToBigInt, keccak256, toHex } from 'viem'
 import RLP from 'rlp'
 import { keccak_256 } from '@noble/hashes/sha3'
-
-// block: eth_getBlockByNumber
-// nonce: eth_getTransactionCount
-// type: eip1559 | legacy
-// 1. eip1559
-// 2. legacy
-// gas: eth_estimateGas
-// eth_sendRawTransaction
-
-// {
-//   to: "0x87114ed56659216E7a1493F2Bdb870b2f2102156",
-//   value: 100000000000000n,
-//   from: "0x2557D0d204a51CF37A0474b814Afa6f942f522cc",
-//   nonce: 0,
-//   type: "eip1559",
-//   maxPriorityFeePerGas: 1049n,
-//   maxFeePerGas: 1064n,
-//   gas: 21000n
-// }
+import { secp256k1 } from '@noble/curves/secp256k1'
 
 const prepareTransactionRequest = async () => {
   const nonce = await getNonce()
   const block = await getBlock()
   const maxPriorityFeePerGas = await getMaxPriorityFeePerGas()
 
-  console.log(maxPriorityFeePerGas)
-  console.log(hexToBigInt(maxPriorityFeePerGas))
-
-  const request = {
+  const originRequest = {
     form: account.address,
     to: '0x87114ed56659216E7a1493F2Bdb870b2f2102156',
     nonce,
-    type: '2',
+    type: toHex(2),
+    value: toHex(10000000000000000n),
     maxPriorityFeePerGas: maxPriorityFeePerGas,
-    maxFeePerGas:
-      hexToBigInt(block.baseFeePerGas) * 2n + hexToBigInt(maxPriorityFeePerGas)
+    maxFeePerGas: toHex(
+      (hexToBigInt(block.baseFeePerGas) * 12n) / 10n +
+        hexToBigInt(maxPriorityFeePerGas)
+    )
   }
+
+  const response = await axios.post(rpc_url, {
+    jsonrpc: '2.0',
+    method: 'eth_estimateGas',
+    params: [originRequest],
+    id: 1
+  })
+
+  // @ts-ignore
+  originRequest.gas = response.data.result
+
+  return originRequest
 }
 
 const getNonce = async () => {
@@ -72,43 +66,53 @@ const getMaxPriorityFeePerGas = async () => {
   return response.data.result
 }
 
-const sendRawTransaction = async () => {
-  const response = await fetch(rpc_url, {
-    method: 'POST',
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'eth_getBlockByNumber',
-      params: ['latest', false],
-      id: 1
-    })
-  }).then((res) => {
-    return res.json()
+const sendRawTransaction = async (signedTransaction) => {
+  const response = await axios.post(rpc_url, {
+    jsonrpc: '2.0',
+    method: 'eth_sendRawTransaction',
+    params: [signedTransaction],
+    id: 1
   })
+  console.log(response.data)
 }
 
-const signTransaction = async () => {
-  // 0x02f86d050282040c8204198252089487114ed56659216e7a1493f2bdb870b2f2102156872386f26fc1000080c080a0d22bcfd8b50976e53a2c0a7e53f1d7a59881095041866a4318b84b8f6feb9cb9a0429d1f66770faf8cc027a95a48b578e645eb570bab0671a57d7da2beb1458ddc
-
-  const request = {
-    from: '0x2557D0d204a51CF37A0474b814Afa6f942f522cc',
-    to: '0x87114ed56659216E7a1493F2Bdb870b2f2102156',
-    value: 10000000000000000n,
-    type: 'eip1559',
-    nonce: 2,
-    maxPriorityFeePerGas: 1036n,
-    maxFeePerGas: 1049n,
-    gas: 21000n
-  }
-
-  // 0x02ea050282040c8204198252089487114ed56659216e7a1493f2bdb870b2f2102156872386f26fc1000080c0
+const signTransaction = async (request) => {
   const serializedTransaction = serializeTransaction({
     chainId: 5,
     ...request
   })
+  const rlp = toRlp(serializedTransaction)
 
-  console.log(serializedTransaction)
+  const hash = toHex(keccak_256(rlp))
 
-  // keccak_256()
+  const { r, s, recovery } = secp256k1.sign(
+    hash.slice(2),
+    '5b91188c221aee8a277de6150e769b161aadb5983d084e83e4f336ceb8049285'
+  )
+
+  const signature = {
+    r,
+    s,
+    v: recovery ? 28n : 27n
+  }
+
+  serializedTransaction.push(
+    signature.v === 27n ? '0x' : toHex(1), // yParity
+    r,
+    s
+  )
+  const lastSignature = toRlp(serializedTransaction)
+
+  const hexes = /*#__PURE__*/ Array.from({ length: 256 }, (_v, i) =>
+    i.toString(16).padStart(2, '0')
+  )
+
+  return (
+    '0x' +
+    lastSignature.reduce((prev, current) => {
+      return prev + hexes[current]
+    }, '')
+  )
 }
 
 const serializeTransaction = (transaction) => {
@@ -124,42 +128,30 @@ const serializeTransaction = (transaction) => {
     data
   } = transaction
 
-  const serializedTransaction = [
+  return [
     toHex(chainId),
-    nonce ? toHex(nonce) : '0x',
-    maxPriorityFeePerGas ? toHex(maxPriorityFeePerGas) : '0x',
-    maxFeePerGas ? toHex(maxFeePerGas) : '0x',
-    gas ? toHex(gas) : '0x',
+    nonce ? nonce : '0x',
+    maxPriorityFeePerGas ? maxPriorityFeePerGas : '0x',
+    maxFeePerGas ? maxFeePerGas : '0x',
+    gas ? gas : '0x',
     to ?? '0x',
-    value ? toHex(value) : '0x',
+    value ? value : '0x',
     data ?? '0x',
     accessList ?? []
   ]
-
-  console.log(serializedTransaction)
-
-  const rlpedUint8Array = RLP.encode(serializedTransaction)
-
-  const rlp: Uint8Array = [uint8.form(2), ...rlpedUint8Array]
-  // console.log(res)
-
-  // const hexes = /*#__PURE__*/ Array.from({ length: 256 }, (_v, i) =>
-  //   i.toString(16).padStart(2, '0')
-  // )
-
-  // const hex = rlpedUint8Array.reduce((prev, current) => {
-  //   return prev + hexes[current]
-  // }, '')
-
-  return rlp
 }
 
-const toRlp = () => {
-  // const encodable = getEncodable(bytes)
-  // const cursor = createCursor(new Uint8Array(encodable.length))
-  // encodable.encode(cursor)
-  // if (to === 'hex') return bytesToHex(cursor.bytes) as ToRlpReturnType<to>
-  // return cursor.bytes as ToRlpReturnType<to>
+const toRlp = (serializedTransaction) => {
+  return new Uint8Array([2, ...RLP.encode(serializedTransaction)])
 }
 
-signTransaction()
+const main = async () => {
+  const request = await prepareTransactionRequest()
+  console.log(request)
+  const signedTransaction = await signTransaction(request)
+  console.log(signedTransaction)
+
+  await sendRawTransaction(signedTransaction)
+}
+
+main()
