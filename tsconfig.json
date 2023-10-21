@@ -8,7 +8,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "composite": true,
-    "strict": true,
+    "strict": false,
     "downlevelIteration": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",

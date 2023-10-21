@@ -1,7 +1,8 @@
 import axios from 'axios'
 import { account, rpc_url } from './constant'
-import { hexToBigInt, keccak256 } from 'viem'
+import { hexToBigInt, keccak256, toHex } from 'viem'
 import RLP from 'rlp'
+import { keccak_256 } from '@noble/hashes/sha3'
 
 // block: eth_getBlockByNumber
 // nonce: eth_getTransactionCount
@@ -86,6 +87,8 @@ const sendRawTransaction = async () => {
 }
 
 const signTransaction = async () => {
+  // 0x02f86d050282040c8204198252089487114ed56659216e7a1493f2bdb870b2f2102156872386f26fc1000080c080a0d22bcfd8b50976e53a2c0a7e53f1d7a59881095041866a4318b84b8f6feb9cb9a0429d1f66770faf8cc027a95a48b578e645eb570bab0671a57d7da2beb1458ddc
+
   const request = {
     from: '0x2557D0d204a51CF37A0474b814Afa6f942f522cc',
     to: '0x87114ed56659216E7a1493F2Bdb870b2f2102156',
@@ -97,21 +100,66 @@ const signTransaction = async () => {
     gas: 21000n
   }
 
-  const bytes = [
-    '0x5',
-    '0x2',
-    '0x40c',
-    '0x419',
-    '0x5208',
-    '0x87114ed56659216E7a1493F2Bdb870b2f2102156',
-    '0x2386f26fc10000',
-    '0x',
-    []
-  ]
-  console.log(RLP.encode(bytes))
-  console.log(RLP.decode(RLP.encode(bytes)))
+  // 0x02ea050282040c8204198252089487114ed56659216e7a1493f2bdb870b2f2102156872386f26fc1000080c0
+  const serializedTransaction = serializeTransaction({
+    chainId: 5,
+    ...request
+  })
 
-  // 0x02f86d050282040c8204198252089487114ed56659216e7a1493f2bdb870b2f2102156872386f26fc1000080c080a0d22bcfd8b50976e53a2c0a7e53f1d7a59881095041866a4318b84b8f6feb9cb9a0429d1f66770faf8cc027a95a48b578e645eb570bab0671a57d7da2beb1458ddc
+  console.log(serializedTransaction)
+
+  // keccak_256()
+}
+
+const serializeTransaction = (transaction) => {
+  const {
+    chainId,
+    gas,
+    nonce,
+    to,
+    value,
+    maxFeePerGas,
+    maxPriorityFeePerGas,
+    accessList,
+    data
+  } = transaction
+
+  const serializedTransaction = [
+    toHex(chainId),
+    nonce ? toHex(nonce) : '0x',
+    maxPriorityFeePerGas ? toHex(maxPriorityFeePerGas) : '0x',
+    maxFeePerGas ? toHex(maxFeePerGas) : '0x',
+    gas ? toHex(gas) : '0x',
+    to ?? '0x',
+    value ? toHex(value) : '0x',
+    data ?? '0x',
+    accessList ?? []
+  ]
+
+  console.log(serializedTransaction)
+
+  const rlpedUint8Array = RLP.encode(serializedTransaction)
+
+  const rlp: Uint8Array = [uint8.form(2), ...rlpedUint8Array]
+  // console.log(res)
+
+  // const hexes = /*#__PURE__*/ Array.from({ length: 256 }, (_v, i) =>
+  //   i.toString(16).padStart(2, '0')
+  // )
+
+  // const hex = rlpedUint8Array.reduce((prev, current) => {
+  //   return prev + hexes[current]
+  // }, '')
+
+  return rlp
+}
+
+const toRlp = () => {
+  // const encodable = getEncodable(bytes)
+  // const cursor = createCursor(new Uint8Array(encodable.length))
+  // encodable.encode(cursor)
+  // if (to === 'hex') return bytesToHex(cursor.bytes) as ToRlpReturnType<to>
+  // return cursor.bytes as ToRlpReturnType<to>
 }
 
 signTransaction()
