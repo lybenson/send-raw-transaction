@@ -146,15 +146,13 @@ const toRlp = (serializedTransaction) => {
   return new Uint8Array([2, ...RLP.encode(serializedTransaction)])
 }
 
-const main = async () => {
+const sendTransaction = async () => {
   const request = await prepareTransactionRequest()
   console.log(request)
   const signedTransaction = await signTransaction(request)
   console.log(signedTransaction)
-
   const hash = await sendRawTransaction(signedTransaction)
-
   console.log(hash)
 }
 
-main()
+sendTransaction()

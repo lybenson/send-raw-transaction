@@ -5,7 +5,7 @@ const provider = new ethers.JsonRpcProvider(rpc_url)
 const wallet = new ethers.Wallet(privateKey)
 const signer = wallet.connect(provider)
 
-const send = async () => {
+const sendTransaction = async () => {
   console.log(await signer.getAddress())
 
   const to = '0x87114ed56659216E7a1493F2Bdb870b2f2102156'
@@ -28,4 +28,4 @@ const send = async () => {
   // }
 }
 
-send()
+sendTransaction()
