@@ -73,7 +73,7 @@ const sendRawTransaction = async (signedTransaction) => {
     params: [signedTransaction],
     id: 1
   })
-  console.log(response.data)
+  return response.data.result
 }
 
 const signTransaction = async (request) => {
@@ -101,15 +101,16 @@ const signTransaction = async (request) => {
     r,
     s
   )
-  const lastSignature = toRlp(serializedTransaction)
+  const lastRlp = toRlp(serializedTransaction)
 
-  const hexes = /*#__PURE__*/ Array.from({ length: 256 }, (_v, i) =>
+  const hexes = Array.from({ length: 256 }, (_v, i) =>
     i.toString(16).padStart(2, '0')
   )
+  console.log(hexes)
 
   return (
     '0x' +
-    lastSignature.reduce((prev, current) => {
+    lastRlp.reduce((prev, current) => {
       return prev + hexes[current]
     }, '')
   )
@@ -151,7 +152,9 @@ const main = async () => {
   const signedTransaction = await signTransaction(request)
   console.log(signedTransaction)
 
-  await sendRawTransaction(signedTransaction)
+  const hash = await sendRawTransaction(signedTransaction)
+
+  console.log(hash)
 }
 
 main()
