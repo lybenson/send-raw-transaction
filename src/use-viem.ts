@@ -28,7 +28,7 @@ const sendTransaction = async () => {
     account,
     chain: goerli,
     to,
-    value: parseEther('0.01'),
+    value: parseEther('0.000000001'),
     type: 'eip1559'
   })
   console.log(request)

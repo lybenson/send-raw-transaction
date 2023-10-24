@@ -1,21 +1,19 @@
 import axios from 'axios'
-import { account, rpc_url } from './constant'
+import { account, privateKey, rpc_url } from './constant'
 import { hexToBigInt, keccak256, toHex } from 'viem'
 import RLP from 'rlp'
 import { keccak_256 } from '@noble/hashes/sha3'
 import { secp256k1 } from '@noble/curves/secp256k1'
 
-const prepareTransactionRequest = async () => {
+const prepareTransactionRequest = async (request) => {
   const nonce = await getNonce()
   const block = await getBlock()
   const maxPriorityFeePerGas = await getMaxPriorityFeePerGas()
 
   const originRequest = {
-    form: account.address,
-    to: '0x87114ed56659216E7a1493F2Bdb870b2f2102156',
+    ...request,
     nonce,
     type: toHex(2),
-    value: toHex(10000000000000000n),
     maxPriorityFeePerGas: maxPriorityFeePerGas,
     maxFeePerGas: toHex(
       (hexToBigInt(block.baseFeePerGas) * 12n) / 10n +
@@ -73,6 +71,8 @@ const sendRawTransaction = async (signedTransaction) => {
     params: [signedTransaction],
     id: 1
   })
+  console.log(response.data)
+
   return response.data.result
 }
 
@@ -85,10 +85,7 @@ const signTransaction = async (request) => {
 
   const hash = toHex(keccak_256(rlp))
 
-  const { r, s, recovery } = secp256k1.sign(
-    hash.slice(2),
-    '5b91188c221aee8a277de6150e769b161aadb5983d084e83e4f336ceb8049285'
-  )
+  const { r, s, recovery } = secp256k1.sign(hash.slice(2), privateKey.slice(2))
 
   const signature = {
     r,
@@ -106,7 +103,6 @@ const signTransaction = async (request) => {
   const hexes = Array.from({ length: 256 }, (_v, i) =>
     i.toString(16).padStart(2, '0')
   )
-  console.log(hexes)
 
   return (
     '0x' +
@@ -146,13 +142,34 @@ const toRlp = (serializedTransaction) => {
   return new Uint8Array([2, ...RLP.encode(serializedTransaction)])
 }
 
+const getTransactionReceipt = async (hash: string) => {
+  const response = await axios.post(rpc_url, {
+    jsonrpc: '2.0',
+    method: 'eth_getTransactionReceipt',
+    params: [hash],
+    id: 1
+  })
+  return response.data.result
+}
+
 const sendTransaction = async () => {
-  const request = await prepareTransactionRequest()
-  console.log(request)
-  const signedTransaction = await signTransaction(request)
-  console.log(signedTransaction)
+  const transaction = await prepareTransactionRequest({
+    form: account.address,
+    to: '0x87114ed56659216E7a1493F2Bdb870b2f2102156',
+    value: toHex(100000000000n)
+  })
+  console.log('transaction=', transaction)
+  const signedTransaction = await signTransaction(transaction)
+  console.log('signedTransaction=', signedTransaction)
   const hash = await sendRawTransaction(signedTransaction)
-  console.log(hash)
+  console.log('hash=', hash)
+
+  const interval = setInterval(async () => {
+    const receipt = await getTransactionReceipt(hash)
+    console.log(receipt)
+
+    if (receipt && receipt.blockNumber) clearInterval(interval)
+  }, 4000)
 }
 
 sendTransaction()

@@ -11,7 +11,7 @@ const sendTransaction = async () => {
   const to = '0x87114ed56659216E7a1493F2Bdb870b2f2102156'
   const request = await signer.populateTransaction({
     to,
-    value: parseEther('0.01'),
+    value: parseEther('0.000000001'),
     type: 2
   })
   console.log(request)
